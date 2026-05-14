@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BG Animator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+–bg:      #0c0c0f;
+–surface: #141418;
+–panel:   #1c1c22;
+–card:    #222228;
+–border:  rgba(255,255,255,0.08);
+–accent:  #c8793a;
+–accent2: #e8a55a;
+–text:    #ede8e0;
+–muted:   #6a6560;
+–r:       12px;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘DM Sans’, sans-serif;
+font-size: 14px;
+display: flex;
+flex-direction: column;
+}
+
+/* ══ HEADER ══ */
+.topbar {
+flex-shrink: 0;
+height: 52px;
+background: var(–surface);
+border-bottom: 1px solid var(–border);
+display: flex;
+align-items: center;
+padding: 0 14px;
+gap: 10px;
+z-index: 10;
+}
+.logo {
+font-family: ‘DM Serif Display’, serif;
+font-size: 18px;
+color: var(–accent2);
+}
+.logo sup { font-family: ‘DM Sans’, sans-serif; font-size: 9px; color: var(–muted); font-weight: 300; margin-left: 3px; }
+.topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+.btn {
+display: inline-flex; align-items: center; gap: 6px;
+padding: 7px 14px; border-radius: 8px; border: none;
+font-family: ‘DM Sans’, sans-serif; font-size: 13px; font-weight: 500;
+cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.btn-ghost { background: transparent; border: 1px solid var(–border); color: var(–muted); }
+.btn-ghost:hover { border-color: var(–accent); color: var(–accent2); }
+.btn-primary { background: linear-gradient(135deg, var(–accent), #8a4a18); color: #fff; }
+.btn-primary:hover { filter: brightness(1.15); }
+.btn-primary:disabled { opacity: 0.3; cursor: not-allowed; filter: none; }
+
+/* ══ MAIN LAYOUT ══ */
+.main {
+flex: 1;
+display: flex;
+flex-direction: column;
+overflow: hidden;
+/* Desktop: side by side */
+}
+@media (min-width: 700px) {
+.main { flex-direction: row; }
+}
+
+/* ══ PREVIEW PANE ══ */
+.preview-pane {
+flex-shrink: 0;
+position: relative;
+background:
+radial-gradient(ellipse 70% 60% at 50% 40%, rgba(200,120,58,0.05) 0%, transparent 70%),
+repeating-linear-gradient(0deg, transparent, transparent 29px, rgba(255,255,255,0.018) 30px),
+repeating-linear-gradient(90deg, transparent, transparent 29px, rgba(255,255,255,0.018) 30px),
+#0c0c0f;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 12px;
+/* Mobile: fixed height */
+height: 52vw;
+min-height: 200px;
+max-height: 340px;
+}
+@media (min-width: 700px) {
+.preview-pane {
+flex: 1;
+height: auto;
+max-height: none;
+}
+}
+
+/* Upload zone */
+#drop-zone {
+display: flex; flex-direction: column; align-items: center; gap: 10px;
+cursor: pointer;
+}
+#drop-zone.hidden { display: none; }
+.drop-ring {
+width: 72px; height: 72px; border-radius: 50%;
+border: 1.5px dashed rgba(200,120,58,0.45);
+display: flex; align-items: center; justify-content: center;
+font-size: 28px; transition: all 0.2s;
+}
+#drop-zone:hover .drop-ring { border-color: var(–accent); background: rgba(200,120,58,0.06); }
+.drop-label { font-family: ‘DM Serif Display’, serif; font-size: 16px; color: var(–text); }
+.drop-sub { font-size: 11px; color: var(–muted); }
+
+/* Preview frame */
+#preview-wrap {
+position: relative; border-radius: 14px; overflow: hidden;
+box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 12px 48px rgba(0,0,0,0.7);
+transition: all 0.3s;
+}
+#preview-wrap.hidden { display: none; }
+#preview-bg { display: block; width: 100%; height: 100%; object-fit: cover; }
+#anim-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+/* Live badge */
+.live-badge {
+position: absolute; top: 10px; right: 10px;
+background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+border: 1px solid rgba(200,120,58,0.4);
+border-radius: 20px; padding: 3px 10px;
+font-size: 10px; font-weight: 500; letter-spacing: 1px;
+color: var(–accent2); display: flex; align-items: center; gap: 5px;
+pointer-events: none;
+}
+.live-dot {
+width: 6px; height: 6px; border-radius: 50%;
+background: #4cff88; box-shadow: 0 0 6px #4cff88;
+animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ══ CONTROL PANE ══ */
+.control-pane {
+flex: 1;
+background: var(–surface);
+border-top: 1px solid var(–border);
+overflow-y: auto;
+-webkit-overflow-scrolling: touch;
+overscroll-behavior: contain;
+}
+@media (min-width: 700px) {
+.control-pane {
+width: 300px;
+flex: none;
+border-top: none;
+border-left: 1px solid var(–border);
+}
+}
+.control-pane::-webkit-scrollbar { width: 3px; }
+.control-pane::-webkit-scrollbar-thumb { background: var(–border); }
+
+/* Sections */
+.section { padding: 14px 14px 10px; border-bottom: 1px solid var(–border); }
+.section-title {
+font-size: 9px; font-weight: 500; letter-spacing: 2.5px;
+text-transform: uppercase; color: var(–muted); margin-bottom: 10px;
+}
+
+/* Upload button */
+.upload-btn {
+width: 100%; padding: 10px; border-radius: 10px;
+border: 1px solid var(–border); background: var(–card);
+color: var(–text); font-family: ‘DM Sans’, sans-serif;
+font-size: 13px; cursor: pointer; display: flex;
+align-items: center; justify-content: center; gap: 8px;
+transition: all 0.15s;
+}
+.upload-btn:hover { border-color: var(–accent); color: var(–accent2); }
+
+/* Effect grid */
+.fx-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+.fx-card {
+padding: 10px 6px; border-radius: 10px;
+border: 1px solid var(–border); background: var(–card);
+cursor: pointer; transition: all 0.15s;
+text-align: center; user-select: none;
+}
+.fx-card:hover { border-color: rgba(200,120,58,0.4); }
+.fx-card.active { border-color: var(–accent); background: rgba(200,120,58,0.12); }
+.fx-icon { font-size: 20px; margin-bottom: 4px; }
+.fx-name { font-size: 11px; color: var(–text); font-weight: 500; }
+
+/* Horizontal scroll rows */
+.scroll-row {
+display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px;
+scrollbar-width: none;
+}
+.scroll-row::-webkit-scrollbar { display: none; }
+
+/* Chips */
+.chip {
+flex-shrink: 0; padding: 7px 14px; border-radius: 20px;
+border: 1px solid var(–border); background: var(–card);
+font-size: 12px; cursor: pointer; transition: all 0.15s;
+color: var(–muted); white-space: nowrap;
+}
+.chip:hover { border-color: var(–accent); color: var(–text); }
+.chip.active { background: var(–accent); border-color: var(–accent); color: #fff; }
+
+/* Color row */
+.color-row { display: flex; gap: 9px; flex-wrap: wrap; }
+.cdot {
+width: 30px; height: 30px; border-radius: 50%;
+cursor: pointer; border: 2px solid transparent;
+transition: all 0.15s;
+}
+.cdot:hover, .cdot.active { border-color: #fff; transform: scale(1.18); }
+
+/* Position grid */
+.pos-grid { display: grid; grid-template-columns: repeat(3,36px); gap: 5px; }
+.pos-btn {
+width: 36px; height: 36px; border-radius: 8px;
+border: 1px solid var(–border); background: var(–card);
+cursor: pointer; transition: all 0.15s;
+font-size: 12px; color: var(–muted);
+}
+.pos-btn:hover { border-color: var(–accent); color: var(–text); }
+.pos-btn.active { background: var(–accent); border-color: var(–accent); color: #fff; }
+
+/* Sliders */
+.sl-row { margin-bottom: 12px; }
+.sl-label { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; }
+.sl-label em { color: var(–accent2); font-style: normal; font-weight: 500; }
+input[type=range] {
+-webkit-appearance: none; width: 100%; height: 3px;
+background: var(–panel); border-radius: 2px; outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+-webkit-appearance: none; width: 16px; height: 16px;
+border-radius: 50%; background: var(–accent);
+cursor: pointer; border: 2px solid var(–bg);
+}
+
+/* ── Keyframes for effects ── */
+@keyframes fx-pulse    { 0%,100%{opacity:var(–a);transform:scale(1) rotate(var(–rot,0deg))} 50%{opacity:var(–b);transform:scale(var(–sc,1.08)) rotate(var(–rot,0deg))} }
+@keyframes fx-drift    { 0%,100%{transform:translate(0,0) rotate(var(–rot,0deg))} 33%{transform:translate(var(–dx1,0),var(–dy1,0)) rotate(var(–rot2,0deg))} 66%{transform:translate(var(–dx2,0),var(–dy2,0)) rotate(var(–rot,0deg))} }
+@keyframes fx-breathe  { 0%,100%{transform:scale(1);opacity:var(–a)} 50%{transform:scale(var(–sc,1.12));opacity:var(–b)} }
+@keyframes fx-fog      { 0%{transform:translateY(0) scaleX(1);opacity:0} 20%{opacity:var(–b)} 80%{opacity:var(–a)} 100%{transform:translateY(var(–rise,-60%)) scaleX(1.5);opacity:0} }
+@keyframes fx-vignette { 0%,100%{opacity:var(–a)} 50%{opacity:var(–b)} }
+@keyframes fx-color    { 0%,100%{filter:hue-rotate(0deg) brightness(1)} 50%{filter:hue-rotate(var(–hd,20deg)) brightness(var(–br,1.08))} }
+</style>
+
+</head>
+<body>
+
+<!-- Topbar -->
+
+<div class="topbar">
+  <div class="logo">BG Animator <sup>beta</sup></div>
+  <div class="topbar-right">
+    <button class="btn btn-ghost" id="btn-reset">↺</button>
+    <button class="btn btn-primary" id="btn-dl" disabled>↓ HTML</button>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept="image/*" style="display:none">
+
+<div class="main">
+
+  <!-- Preview pane -->
+
+  <div class="preview-pane" id="preview-pane">
+    <div id="drop-zone">
+      <div class="drop-ring">🖼</div>
+      <div class="drop-label">Ladda upp bild</div>
+      <div class="drop-sub">Klicka här · JPG PNG WEBP</div>
+    </div>
+    <div id="preview-wrap" class="hidden">
+      <img id="preview-bg" alt="">
+      <div id="anim-layer"></div>
+      <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+
+  <div class="control-pane" id="ctrl-pane">
+
+```
+<!-- Upload / change -->
+<div class="section" id="sec-upload">
+  <div class="section-title">Bild</div>
+  <button class="upload-btn" id="btn-upload">🔄 Välj / byt bild</button>
+</div>
+
+<!-- Effect -->
+<div class="section">
+  <div class="section-title">Animationseffekt</div>
+  <div class="fx-grid">
+    <div class="fx-card active" data-fx="light">   <div class="fx-icon">☀️</div><div class="fx-name">Ljussken</div></div>
+    <div class="fx-card"        data-fx="multilight"><div class="fx-icon">✨</div><div class="fx-name">Multi-ljus</div></div>
+    <div class="fx-card"        data-fx="fog">      <div class="fx-icon">🌫</div><div class="fx-name">Dimma</div></div>
+    <div class="fx-card"        data-fx="vignette"> <div class="fx-icon">🔲</div><div class="fx-name">Vinjett</div></div>
+    <div class="fx-card"        data-fx="colorshift"><div class="fx-icon">🎨</div><div class="fx-name">Färgskift</div></div>
+    <div class="fx-card"        data-fx="breathe">  <div class="fx-icon">💫</div><div class="fx-name">Andning</div></div>
+  </div>
+</div>
+
+<!-- Position (hidden for non-light fx) -->
+<div class="section" id="sec-pos">
+  <div class="section-title">Ljusets position</div>
+  <div class="pos-grid">
+    <button class="pos-btn active" data-pos="top-left">↖</button>
+    <button class="pos-btn" data-pos="top-center">↑</button>
+    <button class="pos-btn" data-pos="top-right">↗</button>
+    <button class="pos-btn" data-pos="mid-left">←</button>
+    <button class="pos-btn" data-pos="center">·</button>
+    <button class="pos-btn" data-pos="mid-right">→</button>
+    <button class="pos-btn" data-pos="bot-left">↙</button>
+    <button class="pos-btn" data-pos="bot-center">↓</button>
+    <button class="pos-btn" data-pos="bot-right">↘</button>
+  </div>
+</div>
+
+<!-- Color -->
+<div class="section" id="sec-color">
+  <div class="section-title">Ljusfärg</div>
+  <div class="color-row">
+    <div class="cdot active" data-color="amber"  style="background:radial-gradient(circle,#ffb840,#7a3000)" title="Amber"></div>
+    <div class="cdot" data-color="gold"   style="background:radial-gradient(circle,#ffe066,#906000)" title="Guld"></div>
+    <div class="cdot" data-color="cool"   style="background:radial-gradient(circle,#80c8ff,#0a3880)" title="Blå"></div>
+    <div class="cdot" data-color="rose"   style="background:radial-gradient(circle,#ffb3c6,#701030)" title="Rosa"></div>
+    <div class="cdot" data-color="mint"   style="background:radial-gradient(circle,#80ffcc,#005040)" title="Mint"></div>
+    <div class="cdot" data-color="violet" style="background:radial-gradient(circle,#c880ff,#380070)" title="Violett"></div>
+    <div class="cdot" data-color="white"  style="background:radial-gradient(circle,#fff,#888)" title="Vit"></div>
+  </div>
+</div>
+
+<!-- Intensity -->
+<div class="section">
+  <div class="section-title">Justering</div>
+  <div class="sl-row">
+    <div class="sl-label">Intensitet <em id="v-int">60</em>%</div>
+    <input type="range" id="sl-int" min="10" max="100" value="60">
+  </div>
+  <div class="sl-row">
+    <div class="sl-label">Hastighet <em id="v-spd">6</em>s</div>
+    <input type="range" id="sl-spd" min="2" max="20" value="6">
+  </div>
+  <div class="sl-row">
+    <div class="sl-label">Storlek <em id="v-sz">70</em>%</div>
+    <input type="range" id="sl-sz" min="20" max="150" value="70">
+  </div>
+  <div class="sl-row" style="margin-bottom:0">
+    <div class="sl-label">Oskärpa <em id="v-bl">40</em>px</div>
+    <input type="range" id="sl-bl" min="5" max="100" value="40">
+  </div>
+</div>
+
+<!-- Blend mode -->
+<div class="section">
+  <div class="section-title">Blandningsläge</div>
+  <div class="scroll-row">
+    <div class="chip active" data-blend="screen">Screen</div>
+    <div class="chip" data-blend="overlay">Overlay</div>
+    <div class="chip" data-blend="soft-light">Soft Light</div>
+    <div class="chip" data-blend="hard-light">Hard Light</div>
+    <div class="chip" data-blend="normal">Normal</div>
+  </div>
+</div>
+
+<!-- bottom spacer -->
+<div style="height:20px"></div>
+```
+
+  </div>
+</div>
+
+<script>
+const S = {
+  img: null, fx:'light', pos:'top-left', color:'amber',
+  int:60, spd:6, sz:70, bl:40, blend:'screen'
+};
+
+const COLORS = {
+  amber:  {r:'255,184,64',  r2:'160,80,0',   beam:'220,140,40'},
+  gold:   {r:'255,224,102', r2:'176,120,0',  beam:'200,180,50'},
+  cool:   {r:'128,200,255', r2:'26,74,138',  beam:'80,160,220'},
+  rose:   {r:'255,179,198', r2:'138,32,64',  beam:'220,100,140'},
+  mint:   {r:'128,255,204', r2:'0,102,68',   beam:'80,200,160'},
+  violet: {r:'200,128,255', r2:'74,0,136',   beam:'160,80,240'},
+  white:  {r:'255,255,255', r2:'160,160,160',beam:'220,220,220'},
+};
+const POS = {
+  'top-left':   {x:'-12%',y:'-14%'},
+  'top-center': {x:'30%',y:'-14%'},
+  'top-right':  {x:'72%',y:'-14%'},
+  'mid-left':   {x:'-15%',y:'32%'},
+  'center':     {x:'28%',y:'28%'},
+  'mid-right':  {x:'72%',y:'32%'},
+  'bot-left':   {x:'-12%',y:'70%'},
+  'bot-center': {x:'28%',y:'75%'},
+  'bot-right':  {x:'68%',y:'70%'},
+};
+
+// ── DOM ──
+const dropZone   = document.getElementById('drop-zone');
+const previewWrap= document.getElementById('preview-wrap');
+const previewBg  = document.getElementById('preview-bg');
+const animLayer  = document.getElementById('anim-layer');
+const dlBtn      = document.getElementById('btn-dl');
+const fileInput  = document.getElementById('file-input');
+
+// ── Upload ──
+dropZone.addEventListener('click', () => fileInput.click());
+document.getElementById('btn-upload').addEventListener('click', () => fileInput.click());
+document.getElementById('btn-reset').addEventListener('click', resetAll);
+
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) loadImg(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadImg(fileInput.files[0]);
+});
+
+function loadImg(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    S.img = e.target.result;
+    previewBg.src = e.target.result;
+    dropZone.classList.add('hidden');
+    previewWrap.classList.remove('hidden');
+    dlBtn.disabled = false;
+    sizePreview();
+    renderFX();
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Size preview to fit pane ──
+function sizePreview() {
+  if (!S.img) return;
+  const pane = document.getElementById('preview-pane');
+  const pw = pane.clientWidth  - 32;
+  const ph = pane.clientHeight - 32;
+  const img = previewBg;
+  // Natural ratio from image
+  const nw = img.naturalWidth  || 390;
+  const nh = img.naturalHeight || 844;
+  const ratio = nh / nw;
+  let w = Math.min(pw, ph / ratio);
+  let h = w * ratio;
+  if (h > ph) { h = ph; w = h / ratio; }
+  previewWrap.style.width  = Math.round(w) + 'px';
+  previewWrap.style.height = Math.round(h) + 'px';
+}
+previewBg.addEventListener('load', sizePreview);
+window.addEventListener('resize', () => { sizePreview(); renderFX(); });
+
+// ── Effect cards ──
+document.querySelectorAll('.fx-card').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.fx-card').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    S.fx = c.dataset.fx;
+    const hasPos   = ['light','multilight'].includes(S.fx);
+    const hasColor = !['vignette'].includes(S.fx);
+    document.getElementById('sec-pos').style.display   = hasPos   ? '' : 'none';
+    document.getElementById('sec-color').style.display = hasColor ? '' : 'none';
+    renderFX();
+  });
+});
+
+// ── Position ──
+document.querySelectorAll('.pos-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.pos-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    S.pos = b.dataset.pos;
+    renderFX();
+  });
+});
+
+// ── Color ──
+document.querySelectorAll('.cdot').forEach(d => {
+  d.addEventListener('click', () => {
+    document.querySelectorAll('.cdot').forEach(x => x.classList.remove('active'));
+    d.classList.add('active');
+    S.color = d.dataset.color;
+    renderFX();
+  });
+});
+
+// ── Sliders ──
+[['sl-int','v-int','int','%'],['sl-spd','v-spd','spd','s'],['sl-sz','v-sz','sz','%'],['sl-bl','v-bl','bl','px']].forEach(([id,vid,key]) => {
+  document.getElementById(id).addEventListener('input', function() {
+    S[key] = +this.value;
+    document.getElementById(vid).textContent = this.value;
+    renderFX();
+  });
+});
+
+// ── Blend ──
+document.querySelectorAll('.chip[data-blend]').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.chip[data-blend]').forEach(x => x.classList.remove('active'));
+    c.classList.add('active');
+    S.blend = c.dataset.blend;
+    renderFX();
+  });
+});
+
+// ── Render FX ──
+function renderFX() {
+  if (!S.img) return;
+  animLayer.innerHTML = '';
+  const col = COLORS[S.color] || COLORS.amber;
+  const op  = S.int / 100;
+  const dur = S.spd;
+  const bl  = S.bl;
+  const bd  = S.blend;
+  const pos = POS[S.pos] || POS['top-left'];
+  const W   = previewWrap.clientWidth;
+  const H   = previewWrap.clientHeight;
+  const big = Math.max(W, H) * (S.sz / 100);
+
+  if (S.fx === 'light') {
+    el({
+      w:big*1.7+'px', h:big*1.5+'px', l:pos.x, t:pos.y,
+      br:'50%', blur:bl+'px', blend:bd,
+      bg:`radial-gradient(circle, rgba(${col.r},${op*0.55}) 0%, rgba(${col.r2},${op*0.22}) 45%, transparent 72%)`,
+      css:`--a:${op*0.7};--b:${op};--sc:1.09;--rot:-15deg;--dx1:14px;--dy1:10px;--dx2:-8px;--dy2:16px;--rot2:-12deg`,
+      anim:`fx-pulse ${dur}s ease-in-out infinite, fx-drift ${dur*1.8}s ease-in-out infinite`,
+    });
+    el({
+      w:big*0.55+'px', h:big*0.55+'px',
+      l:`calc(${pos.x} + ${big*0.04}px)`, t:`calc(${pos.y} + ${big*0.02}px)`,
+      br:'50%', blur:bl*0.35+'px', blend:bd,
+      bg:`radial-gradient(circle, rgba(${col.r},${op*0.85}) 0%, rgba(${col.r},${op*0.28}) 50%, transparent 72%)`,
+      css:`--a:${op*0.7};--b:${op};--sc:1.18`,
+      anim:`fx-breathe ${dur*0.9}s ease-in-out infinite`,
+    });
+    el({
+      w:big*0.38+'px', h:H*1.2+'px',
+      l:`calc(${pos.x} + ${big*0.08}px)`, t:`calc(${pos.y} - ${big*0.05}px)`,
+      blur:bl*0.6+'px', blend:bd, transform:'rotate(30deg)', transformOrigin:'top left',
+      bg:`linear-gradient(to bottom, rgba(${col.beam},${op*0.28}) 0%, rgba(${col.beam},${op*0.07}) 55%, transparent 80%)`,
+      css:`--a:${op*0.55};--b:${op*0.88};--sc:1.1`,
+      anim:`fx-breathe ${dur*1.4}s ease-in-out infinite`,
+    });
+
+  } else if (S.fx === 'multilight') {
+    [['-12%','-12%',1.0,0],[' 60%','18%',0.65,1.5],['18%','68%',0.5,3]].forEach(([lx,ly,sc,delay],i) => {
+      el({
+        w:big*1.2*sc+'px', h:big*1.0*sc+'px', l:lx, t:ly,
+        br:'50%', blur:bl+'px', blend:bd,
+        bg:`radial-gradient(circle, rgba(${col.r},${op*0.55*sc}) 0%, rgba(${col.r2},${op*0.22*sc}) 50%, transparent 72%)`,
+        css:`--a:${op*0.55*sc};--b:${op*sc};--sc:1.1`,
+        anim:`fx-pulse ${dur+i*1.5}s ${delay}s ease-in-out infinite`,
+      });
+    });
+
+  } else if (S.fx === 'fog') {
+    for (let i=0;i<7;i++) {
+      const ww = big*(0.6+Math.cos(i*13)*0.25);
+      const wh = big*(0.32+Math.sin(i*7)*0.15);
+      el({
+        w:ww+'px', h:wh+'px',
+        l:(8+Math.sin(i*47)*30)+'%', t:(H*0.9)+'px',
+        br:'50%', blur:bl+'px', blend:bd,
+        bg:`radial-gradient(ellipse, rgba(180,100,40,${op*0.22}) 0%, transparent 72%)`,
+        css:`--a:${op*0.2};--b:${op*0.55};--rise:-${H*0.8}px`,
+        anim:`fx-fog ${dur+1+i*1.2}s ${(i*1.3).toFixed(1)}s ease-in-out infinite`,
+      });
+    }
+
+  } else if (S.fx === 'vignette') {
+    el({
+      w:'100%', h:'100%', l:'0', t:'0',
+      bg:`radial-gradient(ellipse 82% 82% at 50% 50%, transparent 35%, rgba(0,0,0,${op*0.85}) 100%)`,
+      css:`--a:0.6;--b:${Math.min(op*1.1,1)}`,
+      anim:`fx-vignette ${dur}s ease-in-out infinite`,
+    });
+
+  } else if (S.fx === 'colorshift') {
+    el({
+      w:'100%', h:'100%', l:'0', t:'0', bg:'transparent',
+      css:'--hd:28deg;--br:1.10',
+      anim:`fx-color ${dur}s ease-in-out infinite`,
+    });
+
+  } else if (S.fx === 'breathe') {
+    el({
+      w:'110%', h:'110%', l:'-5%', t:'-5%',
+      br:'0', blur:bl*0.7+'px', blend:bd,
+      bg:`radial-gradient(ellipse 80% 70% at 50% 40%, rgba(${col.r},${op*0.2}) 0%, transparent 65%)`,
+      css:`--a:${op*0.55};--b:${op};--sc:1.04`,
+      anim:`fx-breathe ${dur}s ease-in-out infinite`,
+    });
+  }
+}
+
+function el({w,h,l,t,br='0',blur='0px',blend='screen',bg,css='',anim,transform='',transformOrigin=''}) {
+  const d = document.createElement('div');
+  d.style.cssText = `
+    position:absolute;
+    width:${w}; height:${h};
+    left:${l}; top:${t};
+    border-radius:${br};
+    background:${bg};
+    filter:blur(${blur});
+    mix-blend-mode:${blend};
+    pointer-events:none;
+    ${transform ? 'transform:'+transform+';' : ''}
+    ${transformOrigin ? 'transform-origin:'+transformOrigin+';' : ''}
+    animation:${anim};
+  `;
+  css.split(';').forEach(p => {
+    const [k,v] = p.split(':');
+    if (k && v) d.style.setProperty(k.trim(), v.trim());
+  });
+  animLayer.appendChild(d);
+  return d;
+}
+
+// ── Download ──
+dlBtn.addEventListener('click', () => {
+  dlBtn.disabled = true;
+  dlBtn.textContent = '...';
+  setTimeout(() => {
+    const kf = `
+@keyframes fx-pulse    { 0%,100%{opacity:var(--a);transform:scale(1) rotate(var(--rot,0deg))} 50%{opacity:var(--b);transform:scale(var(--sc,1.08)) rotate(var(--rot,0deg))} }
+@keyframes fx-drift    { 0%,100%{transform:translate(0,0) rotate(var(--rot,0deg))} 33%{transform:translate(var(--dx1,0),var(--dy1,0)) rotate(var(--rot2,0deg))} 66%{transform:translate(var(--dx2,0),var(--dy2,0)) rotate(var(--rot,0deg))} }
+@keyframes fx-breathe  { 0%,100%{transform:scale(1);opacity:var(--a)} 50%{transform:scale(var(--sc,1.12));opacity:var(--b)} }
+@keyframes fx-fog      { 0%{transform:translateY(0) scaleX(1);opacity:0} 20%{opacity:var(--b)} 80%{opacity:var(--a)} 100%{transform:translateY(var(--rise,-60%)) scaleX(1.5);opacity:0} }
+@keyframes fx-vignette { 0%,100%{opacity:var(--a)} 50%{opacity:var(--b)} }
+@keyframes fx-color    { 0%,100%{filter:hue-rotate(0deg) brightness(1)} 50%{filter:hue-rotate(var(--hd,20deg)) brightness(var(--br,1.08))} }`;
+
+    const W = previewWrap.clientWidth;
+    const H = previewWrap.clientHeight;
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>Animerad bakgrund</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:100vw;height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+.scene{position:relative;width:${W}px;height:${H}px;overflow:hidden;border-radius:20px}
+.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+${kf}
+</style></head>
+
+<body><div class="scene">
+  <img class="bg" src="${S.img}" alt="">
+  <div class="layer">${animLayer.innerHTML}</div>
+  <!-- Lägg ditt innehåll här -->
+</div></body></html>`;
+
+```
+const a = document.createElement('a');
+a.href = URL.createObjectURL(new Blob([html],{type:'text/html'}));
+a.download = 'animerad-bakgrund.html';
+a.click();
+dlBtn.disabled = false;
+dlBtn.textContent = '↓ HTML';
+```
+
+}, 200);
+});
+
+// ── Reset ──
+function resetAll() {
+S.img=null; S.fx=‘light’; S.pos=‘top-left’; S.color=‘amber’;
+S.int=60; S.spd=6; S.sz=70; S.bl=40; S.blend=‘screen’;
+previewWrap.classList.add(‘hidden’);
+dropZone.classList.remove(‘hidden’);
+animLayer.innerHTML=’’;
+dlBtn.disabled=true;
+fileInput.value=’’;
+document.querySelectorAll(’.fx-card’).forEach(c=>c.classList.remove(‘active’));
+document.querySelector(’[data-fx=light]’).classList.add(‘active’);
+document.querySelectorAll(’.pos-btn’).forEach(b=>b.classList.remove(‘active’));
+document.querySelector(’[data-pos=top-left]’).classList.add(‘active’);
+document.querySelectorAll(’.cdot’).forEach(d=>d.classList.remove(‘active’));
+document.querySelector(’[data-color=amber]’).classList.add(‘active’);
+document.querySelectorAll(’.chip[data-blend]’).forEach(c=>c.classList.remove(‘active’));
+document.querySelector(’[data-blend=screen]’).classList.add(‘active’);
+[[‘sl-int’,‘v-int’,60],[‘sl-spd’,‘v-spd’,6],[‘sl-sz’,‘v-sz’,70],[‘sl-bl’,‘v-bl’,40]].forEach(([id,vid,val])=>{
+document.getElementById(id).value=val;
+document.getElementById(vid).textContent=val;
+});
+document.getElementById(‘sec-pos’).style.display=’’;
+document.getElementById(‘sec-color’).style.display=’’;
+}
+</script>
+
+</body>
+</html>
